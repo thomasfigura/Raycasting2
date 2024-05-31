@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/Raycasting2.dir/main.cpp.o -o Raycasting2  -L/usr/lib/x86_64-linux-gnu  -lSDL2 

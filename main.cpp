@@ -56,7 +56,7 @@ struct {
     int sight;
 } player;
 
-void drawLine(int x0, int y0, int x1, int y1) {
+void drawLine(int x0, int y0, int x1, int y1, u32 color) {
     double x = x1 - x0;
     double y = y1 - y0;
     double length = sqrt(x * x + y * y);
@@ -68,9 +68,11 @@ void drawLine(int x0, int y0, int x1, int y1) {
     y = y0;
 
     for (double i = 0; i < length; i += 1) {
-        state.pixels[(int)y * SCREEN_WIDTH + (int)x] = 0xFFFF00FF;
-        x += addx;
-        y += addy;
+        if ((int)y * SCREEN_WIDTH + (int)x < SCREEN_HEIGHT * SCREEN_WIDTH) {
+            state.pixels[(int)y * SCREEN_WIDTH + (int)x] = color;
+            x += addx;
+            y += addy;
+        }
     }
 }
 
@@ -83,7 +85,9 @@ void drawLine(int x0, int y0, int x1, int y1) {
 void drawBlock(int x0, int y0, int width, int height, u32 color) {
     for (int j = 0; j < height - 1; j++) {
         for (int i = 0; i < width - 1; i++) {
-            state.pixels[((int)y0 + j) * SCREEN_WIDTH + (int)x0 + i] = color;
+            if (((int)y0 + j) * SCREEN_WIDTH + (int)x0 + i) {
+                state.pixels[((int)y0 + j) * SCREEN_WIDTH + (int)x0 + i] = color;
+            }
         }
     }
 }
@@ -105,15 +109,58 @@ void drawMap() {
         }
     }
 }
+
+void drawRays3D() {
+    int r, mx, my, mp, dof;
+    float rx, ry, ra, xo, yo;
+    ra = player.angle;
+    for (r = 0; r < 1; r++) { // Number of rays casted
+        // Checking for horizontal Lines
+        dof = 0;
+        float aTan = -1 / tan(ra);
+        if (ra > PI) { // looking up or down // Looking Up
+            ry = (((int)player.y >> 6) << 6) - 0.0001;
+            rx = (player.y - ry) * aTan + player.x;
+            yo = -64;
+            xo = -yo * aTan;
+        }
+        if (ra < PI) { // looking up or down // Looking Down
+            ry = (((int)player.y >> 6) << 6) + 64;
+            rx = (player.y - ry) * aTan + player.x;
+            yo = 64;
+            xo = -yo * aTan;
+        }
+        if (ra == 0 || ra == PI) { // Looking left or right
+            rx = player.x;
+            ry = player.y;
+            dof = 8;
+        }
+        while (dof < 8) {
+            mx = (int)(rx) >> 6;
+            my = (int)(ry) >> 6;
+            mp = my * MAP_SIZE + mx;
+            if (mp < MAP_SIZE * MAP_SIZE && MAPDATA[mp] >= 1) { // Wall hit
+                dof = 8;
+            } else {
+                rx += xo;
+                ry += yo;
+            }
+        }
+        drawLine(player.x + player.size / 2,
+                 player.y + player.size / 2,
+                 rx, ry, 0x32cd32);
+    }
+}
+
 void drawPlayer(int x0, int y0, int x1, int y1) {
     for (int j = y0; j < y1; j++) {
         for (int i = x0; i < x1; i++) {
             state.pixels[j * SCREEN_WIDTH + i] = 0xFFFF00FF;
         }
     }
-    drawLine(player.x + player.size/2, player.y + player.size/2,
-             player.x + player.size/2 + player.dx*10,
-             player.dy * 10 + player.y + player.size/2);
+    drawLine(player.x + player.size / 2, player.y + player.size / 2,
+             player.x + player.size / 2 + player.dx * 10,
+             player.dy * 10 + player.y + player.size / 2, 0xFFFF00FF);
 }
 
 int main(int argc, char *argv[]) {
@@ -134,7 +181,7 @@ int main(int argc, char *argv[]) {
                                       SCREEN_HEIGHT);
     ASSERT(state.texture, "Failed to Create SDL Renderer: %s\n", SDL_GetError());
 
-    player = {000.0f, 000.0f, 0.0f, 0.0f, 0.0f, 10, 10};
+    player = {300.0f, 300.0f, 0.0f, 0.0f, 0.0f, 10, 10};
 
     while (!state.quit) {
         SDL_Event ev;
@@ -176,6 +223,7 @@ int main(int argc, char *argv[]) {
         // drawBlock(10,10,10,10,0xFFFFFFFF);
         drawMap();
         drawPlayer(player.x, player.y, player.x + player.size, player.y + player.size);
+        drawRays3D();
 
         SDL_UpdateTexture(state.texture, NULL, state.pixels, SCREEN_WIDTH * 4);
         SDL_RenderCopyEx(state.renderer, state.texture, NULL, NULL, 0.0, NULL,
