@@ -14,7 +14,10 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-#define PI 3.14159
+#define PI 3.1415926535
+#define P2 PI / 2
+#define P3 3 * PI / 2
+#define DR 0.0174533 // 1 Degree in radians
 
 #define ASSERT(_e, ...)               \
     if (!(_e)) {                      \
@@ -31,9 +34,9 @@ static u8 MAPDATA[MAP_SIZE * MAP_SIZE] = {
     1, 1, 1, 1, 1, 1, 1, 1,
     1, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 1, 0, 0, 0, 0, 1,
-    1, 0, 0, 4, 0, 0, 0, 1,
-    1, 0, 3, 0, 0, 2, 0, 1,
-    1, 0, 0, 0, 2, 2, 0, 1,
+    1, 0, 0, 1, 0, 0, 0, 1,
+    1, 0, 1, 0, 0, 1, 0, 1,
+    1, 0, 0, 0, 1, 1, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 1,
     1, 1, 1, 1, 1, 1, 1, 1};
 
@@ -57,7 +60,7 @@ struct {
 } player;
 
 void drawLine(int x0, int y0, int x1, int y1, u32 color) {
-    if (x1 > 0 && x1 < SCREEN_WIDTH && x0 > 0 && x0 < SCREEN_WIDTH && y1 > 0 && y1 < SCREEN_HEIGHT && y0 > 0 && y0 < SCREEN_HEIGHT) {
+    if (x1 >= 0 && x1 < SCREEN_WIDTH && x0 >= 0 && x0 < SCREEN_WIDTH && y1 >= 0 && y1 < SCREEN_HEIGHT && y0 >= 0 && y0 < SCREEN_HEIGHT) {
 
         double x = x1 - x0;
         double y = y1 - y0;
@@ -113,13 +116,24 @@ void drawMap() {
     }
 }
 
+float dist(float ax, float ay, float bx, float by, float ang) {
+    return (sqrt(((bx - ax) * (bx - ax)) + ((by - ay) * (by - ay))));
+}
+
 void drawRays3D() {
     int r, mx, my, mp, dof;
-    float rx, ry, ra, xo, yo;
-    ra = player.angle;
-    for (r = 0; r < 1; r++) { // Number of rays casted
+    float rx, ry, ra, xo, yo, distT;
+    ra = player.angle - DR * 30;
+    if (ra < 0) {
+        ra += 2 * PI;
+    }
+    if (ra > 2 * PI) {
+        ra -= 2 * PI;
+    }
+    for (r = 0; r < 60; r++) { // Number of rays casted
         // Checking for horizontal Lines
         dof = 0;
+        float distH = 100000, hx = player.x, hy = player.y;
         float aTan = -1 / tan(ra);
         if (ra > PI) { // looking up or down // Looking Up
             ry = (((int)player.y >> 6) << 6) - 0.0001;
@@ -142,7 +156,10 @@ void drawRays3D() {
             mx = (int)(rx) >> 6;
             my = (int)(ry) >> 6;
             mp = my * MAP_SIZE + mx;
-            if (mp < MAP_SIZE * MAP_SIZE && MAPDATA[mp] >= 1) { // Wall hit
+            if (mp > 0 && mp < MAP_SIZE * MAP_SIZE && MAPDATA[mp] >= 1) { // Wall hit
+                hx = rx;
+                hy = ry;
+                distH = dist(player.x, player.y, hx, hy, ra);
                 dof = 8;
             } else {
                 rx += xo;
@@ -150,9 +167,79 @@ void drawRays3D() {
                 dof++;
             }
         }
-        drawLine(player.x + player.size / 2,
-                 player.y + player.size / 2,
+
+        // Check Verticle Wall
+        dof = 0;
+        float distV = 1000000, vx = player.x, vy = player.y;
+        float nTan = -tan(ra);
+        if (ra > P2 && ra < P3) {
+            rx = (((int)player.x >> 6) << 6) - 0.0001;
+            ry = (player.x - rx) * nTan + player.y;
+            xo = -64;
+            yo = -xo * nTan;
+        }
+        if (ra < P2 || ra > P3) {
+            rx = (((int)player.x >> 6) << 6) + 64;
+            ry = (player.x - rx) * nTan + player.y;
+            xo = 64;
+            yo = -xo * nTan;
+        }
+        if (ra == 0 || ra == PI) {
+            rx = player.x;
+            ry = player.y;
+            dof = 8;
+        }
+
+        while (dof < 8) {
+            mx = (int)(rx) >> 6;
+            my = (int)(ry) >> 6;
+            mp = my * MAP_SIZE + mx;
+            if (mp > 0 && mp < MAP_SIZE * MAP_SIZE && MAPDATA[mp] >= 1) { // Wall hit
+                vx = rx;
+                vy = ry;
+                distV = dist(player.x, player.y, vx, vy, ra);
+                dof = 8;
+            } else {
+                rx += xo;
+                ry += yo;
+                dof++;
+            }
+        }
+        if (distV < distH) {
+            rx = vx;
+            ry = vy;
+            distT = distV;
+        }
+        if (distH > distV) {
+            rx = hx;
+            ry = hy;
+            distT = distH;
+        }
+
+        //        printf("distV: %f, distH: %f\n", distV, distH);
+
+        drawLine(player.x,
+                 player.y,
                  rx, ry, 0x32cd32);
+        ra += DR;
+        if (ra < 0) {
+            ra += 2 * PI;
+        }
+        if (ra > 2 * PI) {
+            ra -= 2 * PI;
+        }
+
+        // draw 3d walls
+
+        float lineH = (gridSize * 320) / distT;
+        if (lineH > 320) {
+            lineH = 320;
+        }
+        for (int j = 0; j < r; j++) {
+            for (int i = 0; i < 8; i++) {
+                drawLine(j * i + 320, 0, j * i * 320, lineH, 0x800020);
+            }
+        }
     }
 }
 
@@ -162,9 +249,9 @@ void drawPlayer(int x0, int y0, int x1, int y1) {
             state.pixels[j * SCREEN_WIDTH + i] = 0xFFFF00FF;
         }
     }
-    drawLine(player.x + player.size / 2, player.y + player.size / 2,
-             player.x + player.size / 2 + player.dx * 10,
-             player.dy * 10 + player.y + player.size / 2, 0xFFFF00FF);
+    drawLine(player.x, player.y,
+             player.x + player.dx * 10,
+             player.dy * 10 + player.y, 0xFFFF00FF);
 }
 
 int main(int argc, char *argv[]) {
@@ -207,28 +294,28 @@ int main(int argc, char *argv[]) {
             player.x -= player.dx;
             player.y -= player.dy;
         }
-        if (keystate[SDL_SCANCODE_RIGHT]) {
+        if (keystate[SDL_SCANCODE_LEFT]) {
             player.angle -= 0.1;
             if (player.angle < 0) {
                 player.angle += 2 * PI;
             }
-            player.dx = cos(player.angle) * 2;
-            player.dy = sin(player.angle) * 2;
+            player.dx = cos(player.angle) * 5;
+            player.dy = sin(player.angle) * 5;
         }
-        if (keystate[SDL_SCANCODE_LEFT]) {
+        if (keystate[SDL_SCANCODE_RIGHT]) {
             player.angle += 0.1;
             if (player.angle > 2 * PI) {
                 player.angle -= 2 * PI;
             }
-            player.dx = cos(player.angle) * 2;
-            player.dy = sin(player.angle) * 2;
+            player.dx = cos(player.angle) * 5;
+            player.dy = sin(player.angle) * 5;
         }
         memset(state.pixels, 0, sizeof(state.pixels));
-        // drawBlock(10,10,10,10,0xFFFFFFFF);
-        drawMap();
-        drawPlayer(player.x, player.y, player.x + player.size, player.y + player.size);
-        drawRays3D();
-
+        drawBlock(10, 10, 10, 10, 0xFFFFFFFF);
+        // drawMap();
+        // drawPlayer(player.x, player.y, player.x + player.size, player.y + player.size);
+        // drawRays3D();
+        drawLine(10, 10, 300, 250, 0xFFFFFFFF);
         SDL_UpdateTexture(state.texture, NULL, state.pixels, SCREEN_WIDTH * 4);
         SDL_RenderCopyEx(state.renderer, state.texture, NULL, NULL, 0.0, NULL,
                          SDL_FLIP_VERTICAL);
