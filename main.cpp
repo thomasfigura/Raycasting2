@@ -57,21 +57,24 @@ struct {
 } player;
 
 void drawLine(int x0, int y0, int x1, int y1, u32 color) {
-    double x = x1 - x0;
-    double y = y1 - y0;
-    double length = sqrt(x * x + y * y);
+    if (x1 > 0 && x1 < SCREEN_WIDTH && x0 > 0 && x0 < SCREEN_WIDTH && y1 > 0 && y1 < SCREEN_HEIGHT && y0 > 0 && y0 < SCREEN_HEIGHT) {
 
-    double addx = x / length;
-    double addy = y / length;
+        double x = x1 - x0;
+        double y = y1 - y0;
+        double length = sqrt(x * x + y * y);
 
-    x = x0;
-    y = y0;
+        double addx = x / length;
+        double addy = y / length;
 
-    for (double i = 0; i < length; i += 1) {
-        if ((int)y * SCREEN_WIDTH + (int)x < SCREEN_HEIGHT * SCREEN_WIDTH) {
-            state.pixels[(int)y * SCREEN_WIDTH + (int)x] = color;
-            x += addx;
-            y += addy;
+        x = x0;
+        y = y0;
+
+        for (double i = 0; i < length; i += 1) {
+            if ((int)y * SCREEN_WIDTH + (int)x < SCREEN_HEIGHT * SCREEN_WIDTH) {
+                state.pixels[(int)y * SCREEN_WIDTH + (int)x] = color;
+                x += addx;
+                y += addy;
+            }
         }
     }
 }
@@ -144,6 +147,7 @@ void drawRays3D() {
             } else {
                 rx += xo;
                 ry += yo;
+                dof++;
             }
         }
         drawLine(player.x + player.size / 2,
